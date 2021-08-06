@@ -81,25 +81,43 @@ def list_used_ip(credentials,account_email,filename):
                     attachment_info = eni.description
             
             # Set Name tag for subnet id
-            describe_subnet = boto3.client('ec2',
+            describe_network = boto3.client('ec2',
                         aws_access_key_id=credentials['AccessKeyId'],
                         aws_secret_access_key=credentials['SecretAccessKey'],
                         aws_session_token=credentials['SessionToken'],
                         region_name=region)
 
-            filters = [{'Name': 'subnet-id', 'Values': [eni.subnet_id]}]
-            subnet = describe_subnet.describe_subnets(Filters=filters)
+           # filter off the subnet id from the network interface
+            subnet_filter = [{'Name': 'subnet-id', 'Values': [eni.subnet_id]}]
+            subnet = describe_network.describe_subnets(Filters=subnet_filter)
 
+            # Set the friendly name for the subnet
             try:
                 # If subnet has a Name tag then update subnet_name value
-                for tags in subnet['Subnets'][0]['Tags']:
-                    if tags['Key'] == 'Name':
-                        subnet_name = tags['Value']
+                for subnet_tags in subnet['Subnets'][0]['Tags']:
+                    if subnet_tags['Key'] == 'Name':
+                        subnet_name = subnet_tags['Value']
 
+            # If no name tag then catch the Key Error and set the name to the subnet id
             except KeyError:
                 subnet_name = eni.subnet_id
 
-            rows = [ [eni.private_ip_address,attachment_info,eni.subnet.cidr_block,account_email,region,subnet_name]]
+            # filter off the vpc id from the network interface
+            vpc_filter = [{'Name': 'vpc-id', 'Values': [eni.vpc_id]}]
+            vpc = describe_network.describe_vpcs(Filters=vpc_filter)
+
+            # Set the friendly name for the vpc
+            try:
+                # If vpc has a Name tag then update the vpc_name value
+                for vpc_tags in vpc['Vpcs'][0]['Tags']:
+                    if vpc_tags['Key'] == 'Name':
+                        vpc_name = vpc_tags['Value']
+
+            # if no name tag then catch KeyError and set the name to the vpc id
+            except KeyError:
+                vpc_name = eni.vpc_id
+
+            rows = [ [eni.private_ip_address,attachment_info,eni.subnet.cidr_block,account_email,region,subnet_name,vpc_name,eni.vpc.cidr_block]]
 
             with open(filename, 'a') as csvfile:
                 # Write row
@@ -109,7 +127,7 @@ def list_used_ip(credentials,account_email,filename):
 def main():
     # Create csv file
     # field names 
-    fields = ['IP address', 'Description', 'Subnet CIDR', 'Account Email','Region','Subnet Name']
+    fields = ['IP address', 'Description', 'Subnet CIDR', 'Account Email','Region','Subnet Name','VPC Name','VPC CIDR']
     # Name of csv file
     filename = csv_filename
     with open(filename, 'w') as csvfile:
